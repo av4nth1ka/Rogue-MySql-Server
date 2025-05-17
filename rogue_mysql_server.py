@@ -104,6 +104,9 @@ class http_request_handler(asynchat.async_chat):
 
     def push(self, data):
         log.debug('Pushed: %r', data)
+        if data is None:
+            log.error('Attempted to push None — skipping push to avoid crash.')
+            return
         if isinstance(data, str):
             data = data.encode('latin1')
         elif isinstance(data, mysql_packet):
@@ -127,7 +130,7 @@ class http_request_handler(asynchat.async_chat):
                 self.state = 'MoreLength'
         elif self.state == 'MoreLength':
             if data[0] != 0:
-                self.push(None)
+                log.error('Invalid MoreLength packet — closing connection.')
                 self.close_when_done()
             else:
                 self.state = 'Data'
@@ -165,7 +168,7 @@ class http_request_handler(asynchat.async_chat):
                         ))
                         raise LastPacket()
                     elif packet.payload == b'\x00\x01':
-                        self.push(None)
+                        log.error('Received unexpected payload — closing connection.')
                         self.close_when_done()
                     else:
                         raise ValueError()
@@ -198,12 +201,10 @@ class http_request_handler(asynchat.async_chat):
                 self.order = 0
                 self.set_terminator(3)
             except OutOfOrder:
-                log.warning('Out of order')
-                self.push(None)
+                log.warning('Out of order — closing connection.')
                 self.close_when_done()
         else:
-            log.error('Unknown state')
-            self.push('None')
+            log.error('Unknown state — closing connection.')
             self.close_when_done()
 
 class mysql_listener(asyncore.dispatcher):
